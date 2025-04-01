@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import axios from 'axios';
 import { createReadStream } from 'fs';
 import FormData from 'form-data';
@@ -109,7 +112,7 @@ export async function getIPFSContent(cid: string): Promise<Buffer | null> {
       responseType: 'arraybuffer',
       timeout: 10000, // 10 second timeout
     });
-    
+
     if (response.status === 200) {
       return Buffer.from(response.data);
     }
