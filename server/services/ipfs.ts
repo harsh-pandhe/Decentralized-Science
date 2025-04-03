@@ -1,9 +1,8 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
 import axios from 'axios';
 import { createReadStream } from 'fs';
 import FormData from 'form-data';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Use Pinata for IPFS uploads
 const PINATA_API_KEY = process.env.PINATA_API_KEY || '';

@@ -185,6 +185,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Manually trigger AI analysis for a paper
+  app.post("/api/papers/:id/analyze", async (req, res) => {
+    try {
+      const paperId = parseInt(req.params.id);
+      const paper = await storage.getPaper(paperId);
+      
+      if (!paper) {
+        return res.status(404).json({ message: "Paper not found" });
+      }
+      
+      // Trigger AI analysis
+      const aiAnalysis = await analyzePaperContent(
+        paperId,
+        paper.ipfsCid,
+        paper.title,
+        paper.abstract
+      );
+      
+      if (aiAnalysis) {
+        await storage.updatePaperAIAnalysis(paperId, aiAnalysis);
+        return res.status(200).json({ 
+          message: "AI analysis completed successfully", 
+          analysis: aiAnalysis,
+          status: paper.status
+        });
+      } else {
+        return res.status(500).json({ message: "AI analysis failed" });
+      }
+    } catch (error: any) {
+      console.error("Error in AI analysis:", error);
+      res.status(500).json({ message: `Error analyzing paper: ${error.message}` });
+    }
+  });
+  
   // Submit a review for a paper
   app.post("/api/papers/:id/reviews", async (req, res) => {
     try {

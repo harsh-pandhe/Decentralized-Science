@@ -87,6 +87,30 @@ const PaperDetails = () => {
     enabled: !!params?.id,
   });
 
+  // Mutation for manually triggering AI analysis
+  const triggerAIAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(
+        "POST", 
+        `/api/papers/${params?.id}/analyze`
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/papers/${params?.id}`] });
+      toast({
+        title: "AI Analysis Triggered",
+        description: "The AI analysis process has been started. Please check back in a few minutes.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "AI Analysis Failed",
+        description: error.message || "There was an error triggering the AI analysis. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const form = useForm<ReviewFormValues>({
     resolver: zodResolver(reviewSchema),
     defaultValues: {
@@ -503,9 +527,28 @@ const PaperDetails = () => {
                   <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-4">
                     Our AI system powered by OpenAI's GPT-4o is analyzing this paper. This can take 5-10 minutes depending on paper length.
                   </p>
-                  <div className="w-24 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto overflow-hidden relative">
+                  <div className="w-24 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto overflow-hidden relative mb-6">
                     <div className="h-full bg-primary absolute left-0 animate-progress"></div>
                   </div>
+                  
+                  <Button 
+                    variant="outline"
+                    className="mx-auto" 
+                    onClick={() => triggerAIAnalysisMutation.mutate()}
+                    disabled={triggerAIAnalysisMutation.isPending}
+                  >
+                    {triggerAIAnalysisMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Triggering Analysis...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-icons mr-2 text-sm">refresh</span>
+                        Trigger Manual Analysis
+                      </>
+                    )}
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-6">
