@@ -2,34 +2,22 @@ import OpenAI from "openai";
 import { storage } from "../storage";
 import { getIPFSContent } from "./ipfs";
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
-/**
- * Splits text into chunks of approximately the given maximum size
- * @param text The text to split
- * @param maxSize Maximum chunk size in characters
- * @returns Array of text chunks
- */
+
 function splitTextIntoChunks(text: string, maxSize: number = 10000): string[] {
   const chunks: string[] = [];
   let currentChunk = "";
-
-  // Split text by paragraphs to maintain logical divisions
   const paragraphs = text.split(/\n\n+/);
 
   for (const paragraph of paragraphs) {
-    // If adding this paragraph would exceed max size, save current chunk and start new one
     if (currentChunk.length + paragraph.length > maxSize && currentChunk.length > 0) {
       chunks.push(currentChunk);
       currentChunk = paragraph;
     } else {
-      // Otherwise add to current chunk
       currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
     }
   }
 
-  // Add the last chunk if it's not empty
   if (currentChunk) {
     chunks.push(currentChunk);
   }
@@ -37,13 +25,6 @@ function splitTextIntoChunks(text: string, maxSize: number = 10000): string[] {
   return chunks;
 }
 
-/**
- * Analyze a research paper for plagiarism, quality, and generate a summary
- * @param paperId The ID of the paper being analyzed
- * @param ipfsCid The IPFS CID to retrieve the paper content
- * @param title The paper title
- * @param abstract The paper abstract
- */
 export async function analyzePaperContent(
   paperId: number,
   ipfsCid: string,
@@ -56,7 +37,6 @@ export async function analyzePaperContent(
       return null;
     }
 
-    // Retrieve paper content from IPFS
     let content = abstract;
     try {
       const paperContent = await getIPFSContent(ipfsCid);
@@ -67,28 +47,21 @@ export async function analyzePaperContent(
       console.error("Error retrieving paper content from IPFS:", error);
     }
 
-    // For large papers, split into chunks and analyze main sections
-    const MAX_CHUNK_SIZE = 10000; // Characters, not tokens, but a safe approximation
+    const MAX_CHUNK_SIZE = 10000;
     const contentChunks = splitTextIntoChunks(content, MAX_CHUNK_SIZE);
 
-    // If paper is small enough to analyze in one go
     if (contentChunks.length === 1) {
       return await analyzeSingleChunk(paperId, title, content);
     }
 
-    // For large papers, use a different approach
     console.log(`Paper is large, splitting into ${contentChunks.length} chunks for analysis`);
 
-    // Start with analyzing just the abstract and title for a high-level overview
     const initialAnalysis = await analyzeSingleChunk(paperId, title,
       `${abstract}\n\nNote: This is just the abstract. The full paper is very large and being analyzed separately.`);
 
-    // Now analyze a representative sample from the paper
-    // Get introduction and conclusion if possible
     let introduction = "";
     let conclusion = "";
 
-    // Simple heuristic to find intro and conclusion sections
     for (const chunk of contentChunks) {
       if (chunk.toLowerCase().includes("introduction") || chunk.toLowerCase().includes("background")) {
         introduction = chunk;
@@ -105,7 +78,6 @@ export async function analyzePaperContent(
       }
     }
 
-    // Create a representative sample
     const representativeSample = `Title: ${title}
     
 Abstract: ${abstract}
@@ -116,7 +88,8 @@ ${conclusion ? "Conclusion excerpt:\n" + conclusion : ""}
 
 Note: This is a sample of a large paper. The full text was too large to analyze in one request.`;
 
-    // Analyze the sample
+    await sleep(3000);
+
     const detailedAnalysis = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -140,12 +113,10 @@ Note: This is a sample of a large paper. The full text was too large to analyze 
 
     const analysis = JSON.parse(detailedAnalysis.choices[0].message.content);
 
-    // Update paper status based on analysis
-    if (analysis.qualityRating >= 6) { // Lower threshold for large papers
+    if (analysis.qualityRating >= 6) {
       await storage.updatePaperStatus(paperId, "verified");
       await storage.updatePaperAIVerified(paperId, true);
 
-      // Award tokens to the author for high-quality paper
       const paper = await storage.getPaper(paperId);
       if (paper) {
         await storage.awardTokens(paper.authorId, 10, "High-quality paper verified by AI");
@@ -159,13 +130,10 @@ Note: This is a sample of a large paper. The full text was too large to analyze 
   }
 }
 
-/**
- * Analyze a single chunk of content
- * @param paperId The paper ID
- * @param title The paper title
- * @param content The content to analyze
- */
 async function analyzeSingleChunk(paperId: number, title: string, content: string): Promise<any> {
+  const estimatedTokens = content.length / 4;
+  const estimatedDelayMs = Math.ceil((estimatedTokens / 30000) * 60 * 1000);
+  await sleep(estimatedDelayMs);
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
@@ -189,12 +157,10 @@ async function analyzeSingleChunk(paperId: number, title: string, content: strin
 
   const analysis = JSON.parse(response.choices[0].message.content);
 
-  // Update paper status based on analysis
   if (analysis.qualityRating >= 7) {
     await storage.updatePaperStatus(paperId, "verified");
     await storage.updatePaperAIVerified(paperId, true);
 
-    // Award tokens to the author for high-quality paper
     const paper = await storage.getPaper(paperId);
     if (paper) {
       await storage.awardTokens(paper.authorId, 10, "High-quality paper verified by AI");
@@ -204,10 +170,6 @@ async function analyzeSingleChunk(paperId: number, title: string, content: strin
   return analysis;
 }
 
-/**
- * Check a paper for possible plagiarism
- * @param content The paper content to check
- */
 export async function checkForPlagiarism(content: string): Promise<{
   isPlagiarized: boolean;
   confidence: number;
@@ -251,10 +213,6 @@ export async function checkForPlagiarism(content: string): Promise<{
   }
 }
 
-/**
- * Generate a summary of a research paper
- * @param content The paper content to summarize
- */
 export async function summarizePaper(content: string): Promise<string> {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -280,4 +238,8 @@ export async function summarizePaper(content: string): Promise<string> {
     console.error("Error summarizing paper:", error);
     return "Error processing paper summary";
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
